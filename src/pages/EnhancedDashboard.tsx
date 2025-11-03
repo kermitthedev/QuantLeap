@@ -13,15 +13,21 @@ import StrategyBuilder from "@/components/StrategyBuilder";
 import PortfolioGreeks from "@/components/PortfolioGreeks";
 import HistoricalVolatility from "@/components/HistoricalVolatility";
 import RiskScenarioAnalysis from "@/components/RiskScenarioAnalysis";
+import MonteCarloAnimation from "@/components/MonteCarloAnimation";
+import GreeksHedgingCalculator from "@/components/GreeksHedgingCalculator";
+import PDFReportGenerator from "@/components/PDFReportGenerator";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import useKeyboardShortcuts from "@/hooks/useKeyboardShortcuts";
+import useShareableURL from "@/hooks/useShareableURL";
+import toast from "react-hot-toast";
 import { 
   Moon, 
   Sun, 
-  Download, 
   TrendingUp, 
   Activity,
   BarChart3,
@@ -31,7 +37,11 @@ import {
   Briefcase,
   LineChart,
   AlertTriangle,
-  Database
+  Database,
+  Share2,
+  Keyboard,
+  Shield,
+  Play
 } from "lucide-react";
 import {
   calculateBlackScholes,
@@ -52,6 +62,7 @@ export default function EnhancedDashboard() {
   const [realTimeMode, setRealTimeMode] = useState(false);
   const [activeTab, setActiveTab] = useState("pricing");
   const [pricingSubTab, setPricingSubTab] = useState("standard");
+  const [exoticSubTab, setExoticSubTab] = useState("asian");
   
   const [parameters, setParameters] = useState<OptionParameters>({
     spotPrice: 100,
@@ -82,7 +93,7 @@ export default function EnhancedDashboard() {
     barrierType: 'up-and-out' as const,
     rebate: 0,
   });
-  
+
   const [selectedModel, setSelectedModel] = useState<PricingModel>("black-scholes");
   const [result, setResult] = useState<PricingResult | null>(null);
   const [greeks, setGreeks] = useState<Greeks | null>(null);
@@ -90,11 +101,8 @@ export default function EnhancedDashboard() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [comparisons, setComparisons] = useState<ModelComparison[]>([]);
   const [showComparison, setShowComparison] = useState(false);
-  const [computationStats, setComputationStats] = useState({
-    lastComputationTime: 0,
-    averageComputationTime: 0,
-    totalCalculations: 0,
-  });
+
+  const { copyShareURL } = useShareableURL(parameters);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -104,12 +112,11 @@ export default function EnhancedDashboard() {
   const performCalculation = useCallback(() => {
     setIsCalculating(true);
     
-    requestAnimationFrame(() => {
-      const startTime = performance.now();
-      let calculation;
-      let modelName = "";
-      
+    setTimeout(() => {
       try {
+        let calculation;
+        let modelName = "";
+        
         switch (pricingSubTab) {
           case "standard":
             switch (selectedModel) {
@@ -120,7 +127,7 @@ export default function EnhancedDashboard() {
                 break;
               case "monte-carlo":
                 calculation = calculateMonteCarlo(parameters, 50000, true, true);
-                modelName = "Monte Carlo (50,000 paths, Variance Reduction)";
+                modelName = "Monte Carlo (50,000 paths)";
                 break;
               case "binomial":
                 calculation = calculateBinomial(parameters, 200, false);
@@ -150,31 +157,34 @@ export default function EnhancedDashboard() {
             modelName = "Merton Jump-Diffusion";
             break;
             
-          case "asian":
-            calculation = calculateAsianOption(parameters, 50000, 252);
-            modelName = "Asian Option (Arithmetic Average)";
-            break;
-            
-          case "barrier":
-            calculation = calculateBarrierOption(
-              { ...parameters, ...barrierParams } as BarrierParameters,
-              50000,
-              252
-            );
-            modelName = `Barrier Option (${barrierParams.barrierType})`;
-            break;
-            
-          case "digital":
-            calculation = calculateDigitalOption(parameters, 100);
-            modelName = "Digital/Binary Option";
+          case "exotic":
+            switch (exoticSubTab) {
+              case "asian":
+                calculation = calculateAsianOption(parameters, 50000, 252);
+                modelName = "Asian Option (Arithmetic Average)";
+                break;
+              case "barrier":
+                calculation = calculateBarrierOption(
+                  { ...parameters, ...barrierParams } as BarrierParameters,
+                  50000,
+                  252
+                );
+                modelName = `Barrier Option (${barrierParams.barrierType})`;
+                break;
+              case "digital":
+                calculation = calculateDigitalOption(parameters, 100);
+                modelName = "Digital/Binary Option";
+                break;
+              default:
+                calculation = calculateBlackScholes(parameters);
+                modelName = "Black-Scholes-Merton";
+            }
             break;
             
           default:
             calculation = calculateBlackScholes(parameters);
             modelName = "Black-Scholes-Merton";
         }
-        
-        const computationTime = performance.now() - startTime;
         
         setResult({
           price: calculation.price,
@@ -184,32 +194,16 @@ export default function EnhancedDashboard() {
         });
         
         setGreeks(calculation.greeks);
-        
-        setComputationStats(prev => ({
-          lastComputationTime: computationTime,
-          totalCalculations: prev.totalCalculations + 1,
-          averageComputationTime: 
-            (prev.averageComputationTime * prev.totalCalculations + computationTime) / 
-            (prev.totalCalculations + 1),
-        }));
+        toast.success("Calculation complete!");
         
       } catch (error) {
         console.error("Calculation error:", error);
+        toast.error("Calculation failed");
       } finally {
         setIsCalculating(false);
       }
-    });
-  }, [parameters, selectedModel, pricingSubTab, hestonParams, jumpParams, barrierParams, result?.price]);
-
-  useEffect(() => {
-    if (realTimeMode && activeTab === "pricing") {
-      const timeoutId = setTimeout(() => {
-        performCalculation();
-      }, 300);
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [realTimeMode, parameters, performCalculation, activeTab]);
+    }, 100);
+  }, [parameters, selectedModel, pricingSubTab, exoticSubTab, hestonParams, jumpParams, barrierParams, result?.price]);
 
   const handleCalculate = () => {
     performCalculation();
@@ -217,90 +211,57 @@ export default function EnhancedDashboard() {
 
   const handleCompareAllModels = () => {
     setIsCalculating(true);
+    toast.loading("Comparing all models...");
     
     setTimeout(() => {
-      const models: Array<{ 
-        calculate: () => any; 
-        name: string;
-      }> = [
-        {
-          calculate: () => calculateBlackScholes(parameters),
-          name: "Black-Scholes-Merton"
-        },
-        {
-          calculate: () => calculateMonteCarlo(parameters, 50000, true, true),
-          name: "Monte Carlo (50K paths + VRT)"
-        },
-        {
-          calculate: () => calculateBinomial(parameters, 200, false),
-          name: "Binomial Tree (200 steps)"
-        },
-        {
-          calculate: () => calculateBinomial(parameters, 200, true),
-          name: "Binomial (American)"
-        },
-        {
-          calculate: () => calculateHeston(
-            { ...parameters, ...hestonParams } as HestonParameters,
-            30000,
-            50
-          ),
-          name: "Heston Stochastic Vol"
-        },
-        {
-          calculate: () => calculateJumpDiffusion(
-            { ...parameters, ...jumpParams } as JumpDiffusionParameters,
-            30000,
-            50
-          ),
-          name: "Jump-Diffusion"
-        },
+      const models = [
+        { calculate: () => calculateBlackScholes(parameters), name: "Black-Scholes" },
+        { calculate: () => calculateMonteCarlo(parameters, 50000, true, true), name: "Monte Carlo" },
+        { calculate: () => calculateBinomial(parameters, 200, false), name: "Binomial Tree" },
       ];
       
-      const comparisonsData: ModelComparison[] = models.map(({ calculate, name }) => {
+      const comparisonsData = models.map(({ calculate, name }) => {
         const startTime = performance.now();
         const calculation = calculate();
         const computationTime = performance.now() - startTime;
         
-        return {
-          model: name,
-          price: calculation.price,
-          computationTime,
-        };
+        return { model: name, price: calculation.price, computationTime };
       });
       
       setComparisons(comparisonsData);
       setShowComparison(true);
       setIsCalculating(false);
+      toast.success("Model comparison complete!");
     }, 100);
   };
 
-  const handleExport = () => {
-    const exportData = {
-      parameters,
-      advancedParameters: {
-        heston: hestonParams,
-        jumpDiffusion: jumpParams,
-        barrier: barrierParams,
-      },
-      result,
-      greeks,
-      higherOrderGreeks,
-      comparisons: showComparison ? comparisons : [],
-      computationStats,
-      timestamp: new Date().toISOString(),
-      model: pricingSubTab,
-    };
-    
-    const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `options-pricing-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onCalculate: handleCalculate,
+    onToggleCallPut: () => {
+      setParameters(prev => ({
+        ...prev,
+        optionType: prev.optionType === "call" ? "put" : "call"
+      }));
+    },
+    onIncreaseSpot: () => {
+      setParameters(prev => ({ ...prev, spotPrice: prev.spotPrice + 1 }));
+    },
+    onDecreaseSpot: () => {
+      setParameters(prev => ({ ...prev, spotPrice: prev.spotPrice - 1 }));
+    },
+    onReset: () => {
+      setParameters({
+        spotPrice: 100,
+        strikePrice: 100,
+        volatility: 0.2,
+        timeToMaturity: 1,
+        riskFreeRate: 0.05,
+        dividendYield: 0,
+        optionType: "call",
+      });
+    },
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -317,51 +278,61 @@ export default function EnhancedDashboard() {
             <p className="text-xs text-muted-foreground flex items-center gap-2">
               <Activity className="h-3 w-3" />
               Institutional-Grade Quantitative Analytics
-              {computationStats.totalCalculations > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {computationStats.totalCalculations} calculations
-                </Badge>
-              )}
             </p>
           </div>
         </div>
         
         <div className="flex items-center gap-3">
-          {activeTab === "pricing" && (
-            <>
-              <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-muted/50">
-                <Zap className={`h-4 w-4 ${realTimeMode ? 'text-yellow-500' : 'text-muted-foreground'}`} />
-                <Label htmlFor="realtime-mode" className="text-sm cursor-pointer">
-                  Real-time
-                </Label>
-                <Switch
-                  id="realtime-mode"
-                  checked={realTimeMode}
-                  onCheckedChange={setRealTimeMode}
-                />
-              </div>
-              
-              <Button
-                variant="outline"
-                size="default"
-                onClick={handleCompareAllModels}
-                disabled={isCalculating}
-                className="gap-2"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Compare Models
-              </Button>
-            </>
-          )}
+          <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-muted/50">
+            <Zap className={`h-4 w-4 ${realTimeMode ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+            <Label htmlFor="realtime-mode" className="text-sm cursor-pointer">
+              Real-time
+            </Label>
+            <Switch
+              id="realtime-mode"
+              checked={realTimeMode}
+              onCheckedChange={setRealTimeMode}
+            />
+          </div>
           
           <Button
             variant="outline"
             size="default"
-            onClick={handleExport}
+            onClick={handleCompareAllModels}
+            disabled={isCalculating}
             className="gap-2"
           >
-            <Download className="h-4 w-4" />
-            Export
+            <BarChart3 className="h-4 w-4" />
+            Compare Models
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="default"
+            onClick={copyShareURL}
+            className="gap-2"
+          >
+            <Share2 className="h-4 w-4" />
+            Share
+          </Button>
+          
+          {result && (
+            <PDFReportGenerator 
+              data={{ 
+                parameters, 
+                result, 
+                greeks: greeks || { delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0 }, 
+                timestamp: new Date() 
+              }} 
+            />
+          )}
+          
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => toast("Press ? for keyboard shortcuts", { icon: <Keyboard className="h-4 w-4" /> })}
+          >
+            <Keyboard className="h-5 w-5" />
           </Button>
           
           <Button
@@ -395,6 +366,10 @@ export default function EnhancedDashboard() {
                 <Briefcase className="h-4 w-4" />
                 Portfolio Greeks
               </TabsTrigger>
+              <TabsTrigger value="hedging" className="gap-2">
+                <Shield className="h-4 w-4" />
+                Greeks Hedging
+              </TabsTrigger>
               <TabsTrigger value="historical" className="gap-2">
                 <LineChart className="h-4 w-4" />
                 Historical Vol
@@ -419,29 +394,6 @@ export default function EnhancedDashboard() {
                 onCalculate={handleCalculate}
                 isCalculating={isCalculating}
               />
-              
-              {computationStats.totalCalculations > 0 && (
-                <div className="mt-4 p-4 border rounded-lg bg-muted/30">
-                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
-                    Performance Metrics
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Last:</span>
-                      <span className="font-mono font-medium">
-                        {computationStats.lastComputationTime.toFixed(2)}ms
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Average:</span>
-                      <span className="font-mono font-medium">
-                        {computationStats.averageComputationTime.toFixed(2)}ms
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="col-span-6 space-y-6">
@@ -455,13 +407,24 @@ export default function EnhancedDashboard() {
 
                 <TabsContent value="standard" className="space-y-6">
                   <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel}>
+                    {selectedModel === "monte-carlo" && (
+                      <MonteCarloAnimation
+                        spotPrice={parameters.spotPrice}
+                        volatility={parameters.volatility}
+                        timeToMaturity={parameters.timeToMaturity}
+                        riskFreeRate={parameters.riskFreeRate}
+                      />
+                    )}
+                    
                     <PayoffDiagram
                       spotPrice={parameters.spotPrice}
                       strikePrice={parameters.strikePrice}
                       optionPrice={result?.price || 0}
                       optionType={parameters.optionType}
                     />
+                    
                     <VolatilitySurface currentVolatility={parameters.volatility} />
+                    
                     <GreeksSensitivity
                       spotPrice={parameters.spotPrice}
                       strikePrice={parameters.strikePrice}
@@ -471,26 +434,48 @@ export default function EnhancedDashboard() {
 
                 <TabsContent value="stochastic-vol" className="space-y-6">
                   <div className="bg-card p-6 rounded-lg border">
-                    <h3 className="text-lg font-semibold mb-4">Heston Model Parameters</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Heston Model Parameters</h3>
+                      <Button onClick={handleCalculate} disabled={isCalculating} className="gap-2">
+                        <Play className="h-4 w-4" />
+                        Calculate Heston
+                      </Button>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label className="text-xs">Mean Reversion (κ)</Label>
-                        <input
+                        <Input
                           type="number"
                           step="0.1"
                           value={hestonParams.kappa}
                           onChange={(e) => setHestonParams({...hestonParams, kappa: parseFloat(e.target.value)})}
-                          className="w-full mt-1 px-3 py-2 border rounded"
                         />
                       </div>
                       <div>
                         <Label className="text-xs">Long-term Variance (θ)</Label>
-                        <input
+                        <Input
                           type="number"
                           step="0.01"
                           value={hestonParams.theta}
                           onChange={(e) => setHestonParams({...hestonParams, theta: parseFloat(e.target.value)})}
-                          className="w-full mt-1 px-3 py-2 border rounded"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Vol of Vol (ξ)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={hestonParams.xi}
+                          onChange={(e) => setHestonParams({...hestonParams, xi: parseFloat(e.target.value)})}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Correlation (ρ)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={hestonParams.rho}
+                          onChange={(e) => setHestonParams({...hestonParams, rho: parseFloat(e.target.value)})}
                         />
                       </div>
                     </div>
@@ -505,36 +490,39 @@ export default function EnhancedDashboard() {
 
                 <TabsContent value="jump-diffusion" className="space-y-6">
                   <div className="bg-card p-6 rounded-lg border">
-                    <h3 className="text-lg font-semibold mb-4">Jump-Diffusion Parameters</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Jump-Diffusion Parameters</h3>
+                      <Button onClick={handleCalculate} disabled={isCalculating} className="gap-2">
+                        <Play className="h-4 w-4" />
+                        Calculate Jumps
+                      </Button>
+                    </div>
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <Label className="text-xs">Jump Intensity (λ)</Label>
-                        <input
+                        <Input
                           type="number"
                           step="0.1"
                           value={jumpParams.lambda}
                           onChange={(e) => setJumpParams({...jumpParams, lambda: parseFloat(e.target.value)})}
-                          className="w-full mt-1 px-3 py-2 border rounded"
                         />
                       </div>
                       <div>
                         <Label className="text-xs">Mean Jump (μⱼ)</Label>
-                        <input
+                        <Input
                           type="number"
                           step="0.01"
                           value={jumpParams.muJ}
                           onChange={(e) => setJumpParams({...jumpParams, muJ: parseFloat(e.target.value)})}
-                          className="w-full mt-1 px-3 py-2 border rounded"
                         />
                       </div>
                       <div>
                         <Label className="text-xs">Jump Vol (σⱼ)</Label>
-                        <input
+                        <Input
                           type="number"
                           step="0.01"
                           value={jumpParams.sigmaJ}
                           onChange={(e) => setJumpParams({...jumpParams, sigmaJ: parseFloat(e.target.value)})}
-                          className="w-full mt-1 px-3 py-2 border rounded"
                         />
                       </div>
                     </div>
@@ -548,7 +536,7 @@ export default function EnhancedDashboard() {
                 </TabsContent>
 
                 <TabsContent value="exotic" className="space-y-6">
-                  <Tabs defaultValue="asian">
+                  <Tabs value={exoticSubTab} onValueChange={setExoticSubTab}>
                     <TabsList className="grid w-full grid-cols-3">
                       <TabsTrigger value="asian">Asian</TabsTrigger>
                       <TabsTrigger value="barrier">Barrier</TabsTrigger>
@@ -557,24 +545,35 @@ export default function EnhancedDashboard() {
                     
                     <TabsContent value="asian">
                       <div className="bg-card p-6 rounded-lg border">
-                        <h3 className="text-lg font-semibold mb-2">Asian Option</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-lg font-semibold">Asian Option</h3>
+                          <Button onClick={handleCalculate} disabled={isCalculating} className="gap-2">
+                            <Play className="h-4 w-4" />
+                            Calculate Asian
+                          </Button>
+                        </div>
                         <p className="text-sm text-muted-foreground">
-                          Payoff based on arithmetic average price
+                          Payoff based on arithmetic average price over the life of the option
                         </p>
                       </div>
                     </TabsContent>
                     
                     <TabsContent value="barrier">
                       <div className="bg-card p-6 rounded-lg border space-y-4">
-                        <h3 className="text-lg font-semibold">Barrier Option</h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-semibold">Barrier Option</h3>
+                          <Button onClick={handleCalculate} disabled={isCalculating} className="gap-2">
+                            <Play className="h-4 w-4" />
+                            Calculate Barrier
+                          </Button>
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label className="text-xs">Barrier Level</Label>
-                            <input
+                            <Input
                               type="number"
                               value={barrierParams.barrier}
                               onChange={(e) => setBarrierParams({...barrierParams, barrier: parseFloat(e.target.value)})}
-                              className="w-full mt-1 px-3 py-2 border rounded"
                             />
                           </div>
                           <div>
@@ -582,7 +581,7 @@ export default function EnhancedDashboard() {
                             <select
                               value={barrierParams.barrierType}
                               onChange={(e) => setBarrierParams({...barrierParams, barrierType: e.target.value as any})}
-                              className="w-full mt-1 px-3 py-2 border rounded"
+                              className="w-full mt-1 px-3 py-2 border rounded bg-background"
                             >
                               <option value="up-and-out">Up-and-Out</option>
                               <option value="up-and-in">Up-and-In</option>
@@ -596,9 +595,15 @@ export default function EnhancedDashboard() {
                     
                     <TabsContent value="digital">
                       <div className="bg-card p-6 rounded-lg border">
-                        <h3 className="text-lg font-semibold mb-2">Digital/Binary Option</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-lg font-semibold">Digital/Binary Option</h3>
+                          <Button onClick={handleCalculate} disabled={isCalculating} className="gap-2">
+                            <Play className="h-4 w-4" />
+                            Calculate Digital
+                          </Button>
+                        </div>
                         <p className="text-sm text-muted-foreground">
-                          Fixed payout if in-the-money
+                          Fixed payout ($100) if option expires in-the-money, zero otherwise
                         </p>
                       </div>
                     </TabsContent>
@@ -614,7 +619,7 @@ export default function EnhancedDashboard() {
               </Tabs>
             </div>
 
-            <div className="col-span-3 space-y-6 sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
+            <div className="col-span-3 space-y-6">
               <PricingResults result={result} optionType={parameters.optionType} />
               <GreeksTable greeks={greeks} higherOrderGreeks={higherOrderGreeks} />
               
@@ -630,29 +635,19 @@ export default function EnhancedDashboard() {
           </div>
         )}
 
-        {/* Market Data Tab */}
         {activeTab === "market-data" && <MarketDataPanel />}
-
-        {/* Strategy Builder Tab */}
         {activeTab === "strategies" && <StrategyBuilder />}
-
-        {/* Portfolio Greeks Tab */}
         {activeTab === "portfolio" && <PortfolioGreeks />}
-
-        {/* Historical Volatility Tab */}
+        {activeTab === "hedging" && <GreeksHedgingCalculator />}
         {activeTab === "historical" && <HistoricalVolatility />}
-
-        {/* Risk Scenarios Tab */}
         {activeTab === "risk" && <RiskScenarioAnalysis />}
 
-        {/* Model Comparison (appears on pricing tab) */}
         {activeTab === "pricing" && showComparison && comparisons.length > 0 && (
           <div className="mt-6">
             <ComparisonTable comparisons={comparisons} />
           </div>
         )}
 
-        {/* Implied Vol Calculator (optional floating panel) */}
         {activeTab === "pricing" && (
           <div className="mt-6">
             <ImpliedVolatilityCalculator />
