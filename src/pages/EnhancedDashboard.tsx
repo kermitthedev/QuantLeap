@@ -16,6 +16,17 @@ import RiskScenarioAnalysis from "@/components/RiskScenarioAnalysis";
 import MonteCarloAnimation from "@/components/MonteCarloAnimation";
 import GreeksHedgingCalculator from "@/components/GreeksHedgingCalculator";
 import PDFReportGenerator from "@/components/PDFReportGenerator";
+import GreeksHeatmap from "@/components/GreeksHeatmap";
+import StrategyPayoffVisualizer from "@/components/StrategyPayoffVisualizer";
+import VolatilitySmile from "@/components/VolatilitySmile";
+import PositionSizingCalculator from "@/components/PositionSizingCalculator";
+import ProbabilityDistribution from "@/components/ProbabilityDistribution";
+import TimeDecayAnimation from "@/components/TimeDecayAnimation";
+import GreeksThroughTime from "@/components/GreeksThroughTime";
+import AIStrategySuggestions from "@/components/AIStrategySuggestions";
+import WorkspaceManagerComponent from "@/components/WorkspaceManager";
+import ExportButton from "@/components/ExportButton";
+import SocialShare from "@/components/SocialShare";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -41,7 +52,11 @@ import {
   Share2,
   Keyboard,
   Shield,
-  Play
+  Play,
+  Layers,
+  Target,
+  Clock,
+  Sparkles
 } from "lucide-react";
 import {
   calculateBlackScholes,
@@ -56,6 +71,7 @@ import {
   type JumpDiffusionParameters,
   type BarrierParameters,
 } from "@/lib/advanced-options-pricing";
+import { WorkspaceManager } from "@/lib/workspaceManager";
 
 export default function EnhancedDashboard() {
   const [isDark, setIsDark] = useState(false);
@@ -194,7 +210,10 @@ export default function EnhancedDashboard() {
         });
         
         setGreeks(calculation.greeks);
-        toast.success("Calculation complete!");
+        
+        if (!realTimeMode) {
+          toast.success("Calculation complete!");
+        }
         
       } catch (error) {
         console.error("Calculation error:", error);
@@ -203,7 +222,29 @@ export default function EnhancedDashboard() {
         setIsCalculating(false);
       }
     }, 100);
-  }, [parameters, selectedModel, pricingSubTab, exoticSubTab, hestonParams, jumpParams, barrierParams, result?.price]);
+  }, [parameters, selectedModel, pricingSubTab, exoticSubTab, hestonParams, jumpParams, barrierParams, result?.price, realTimeMode]);
+
+  useEffect(() => {
+    if (realTimeMode) {
+      performCalculation();
+      
+      const interval = setInterval(() => {
+        setParameters(prev => ({
+          ...prev,
+          spotPrice: prev.spotPrice + (Math.random() - 0.5) * 0.5,
+          volatility: Math.max(0.05, Math.min(0.5, prev.volatility + (Math.random() - 0.5) * 0.01)),
+        }));
+      }, 2000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [realTimeMode, performCalculation]);
+
+  useEffect(() => {
+    if (realTimeMode) {
+      performCalculation();
+    }
+  }, [parameters, realTimeMode, performCalculation]);
 
   const handleCalculate = () => {
     performCalculation();
@@ -235,7 +276,25 @@ export default function EnhancedDashboard() {
     }, 100);
   };
 
-  // Keyboard shortcuts
+  const handleRealTimeModeToggle = (checked: boolean) => {
+    setRealTimeMode(checked);
+    if (checked) {
+      toast.success("Real-time mode activated! Auto-updating every 2 seconds", { 
+        duration: 3000,
+        icon: "⚡"
+      });
+    } else {
+      toast("Real-time mode deactivated", { icon: "⏸️" });
+    }
+  };
+
+  const handleLoadWorkspace = (workspace: any) => {
+    if (workspace.parameters) {
+      setParameters(workspace.parameters);
+      toast.success(`Loaded workspace: ${workspace.name}`);
+    }
+  };
+
   useKeyboardShortcuts({
     onCalculate: handleCalculate,
     onToggleCallPut: () => {
@@ -283,15 +342,20 @@ export default function EnhancedDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
+          <WorkspaceManagerComponent 
+            currentParameters={parameters} 
+            onLoadWorkspace={handleLoadWorkspace}
+          />
+          
           <div className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-muted/50">
-            <Zap className={`h-4 w-4 ${realTimeMode ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+            <Zap className={`h-4 w-4 ${realTimeMode ? 'text-yellow-500 animate-pulse' : 'text-muted-foreground'}`} />
             <Label htmlFor="realtime-mode" className="text-sm cursor-pointer">
               Real-time
             </Label>
             <Switch
               id="realtime-mode"
               checked={realTimeMode}
-              onCheckedChange={setRealTimeMode}
+              onCheckedChange={handleRealTimeModeToggle}
             />
           </div>
           
@@ -303,28 +367,27 @@ export default function EnhancedDashboard() {
             className="gap-2"
           >
             <BarChart3 className="h-4 w-4" />
-            Compare Models
+            Compare
           </Button>
-          
-          <Button
-            variant="outline"
-            size="default"
-            onClick={copyShareURL}
-            className="gap-2"
-          >
-            <Share2 className="h-4 w-4" />
-            Share
-          </Button>
+
+          <ExportButton 
+            data={{ parameters, result, greeks }}
+            greeks={greeks}
+            higherOrderGreeks={higherOrderGreeks}
+          />
           
           {result && (
-            <PDFReportGenerator 
-              data={{ 
-                parameters, 
-                result, 
-                greeks: greeks || { delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0 }, 
-                timestamp: new Date() 
-              }} 
-            />
+            <>
+              <SocialShare parameters={parameters} result={result} greeks={greeks} />
+              <PDFReportGenerator 
+                data={{ 
+                  parameters, 
+                  result, 
+                  greeks: greeks || { delta: 0, gamma: 0, theta: 0, vega: 0, rho: 0 }, 
+                  timestamp: new Date() 
+                }} 
+              />
+            </>
           )}
           
           <Button
@@ -354,29 +417,45 @@ export default function EnhancedDashboard() {
                 <Calculator className="h-4 w-4" />
                 Options Pricing
               </TabsTrigger>
+              <TabsTrigger value="advanced" className="gap-2">
+                <Layers className="h-4 w-4" />
+                Advanced Analytics
+              </TabsTrigger>
+              <TabsTrigger value="animations" className="gap-2">
+                <Clock className="h-4 w-4" />
+                Time Analysis
+              </TabsTrigger>
+              <TabsTrigger value="ai-insights" className="gap-2">
+                <Sparkles className="h-4 w-4" />
+                AI Insights
+              </TabsTrigger>
               <TabsTrigger value="market-data" className="gap-2">
                 <Database className="h-4 w-4" />
                 Market Data
               </TabsTrigger>
               <TabsTrigger value="strategies" className="gap-2">
                 <TrendingUp className="h-4 w-4" />
-                Strategy Builder
+                Strategies
               </TabsTrigger>
               <TabsTrigger value="portfolio" className="gap-2">
                 <Briefcase className="h-4 w-4" />
-                Portfolio Greeks
+                Portfolio
               </TabsTrigger>
               <TabsTrigger value="hedging" className="gap-2">
                 <Shield className="h-4 w-4" />
-                Greeks Hedging
+                Hedging
+              </TabsTrigger>
+              <TabsTrigger value="position-sizing" className="gap-2">
+                <Target className="h-4 w-4" />
+                Position Sizing
               </TabsTrigger>
               <TabsTrigger value="historical" className="gap-2">
                 <LineChart className="h-4 w-4" />
-                Historical Vol
+                Historical
               </TabsTrigger>
               <TabsTrigger value="risk" className="gap-2">
                 <AlertTriangle className="h-4 w-4" />
-                Risk Scenarios
+                Risk
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -624,14 +703,81 @@ export default function EnhancedDashboard() {
               <GreeksTable greeks={greeks} higherOrderGreeks={higherOrderGreeks} />
               
               {realTimeMode && (
-                <div className="p-4 border rounded-lg bg-yellow-500/10 border-yellow-500/20">
+                <div className="p-4 border rounded-lg bg-yellow-500/10 border-yellow-500/20 animate-pulse">
                   <div className="flex items-center gap-2 text-sm font-medium text-yellow-700 dark:text-yellow-400">
                     <RefreshCw className="h-4 w-4 animate-spin" />
                     Real-time Mode Active
+                    <Badge variant="outline" className="ml-auto">
+                      Auto-updating
+                    </Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Prices update every 2 seconds with simulated market movements
+                  </p>
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Advanced Analytics Tab */}
+        {activeTab === "advanced" && (
+          <div className="space-y-6">
+            <ProbabilityDistribution
+              spotPrice={parameters.spotPrice}
+              strikePrice={parameters.strikePrice}
+              volatility={parameters.volatility}
+              timeToMaturity={parameters.timeToMaturity}
+              optionType={parameters.optionType}
+            />
+            
+            <GreeksHeatmap
+              strikePrice={parameters.strikePrice}
+              volatility={parameters.volatility}
+              riskFreeRate={parameters.riskFreeRate}
+              optionType={parameters.optionType}
+            />
+            
+            <StrategyPayoffVisualizer />
+            
+            <VolatilitySmile
+              spotPrice={parameters.spotPrice}
+              atmVolatility={parameters.volatility}
+            />
+          </div>
+        )}
+
+        {/* Time Analysis Tab (NEW) */}
+        {activeTab === "animations" && (
+          <div className="space-y-6">
+            <TimeDecayAnimation
+              spotPrice={parameters.spotPrice}
+              strikePrice={parameters.strikePrice}
+              volatility={parameters.volatility}
+              timeToMaturity={parameters.timeToMaturity}
+              riskFreeRate={parameters.riskFreeRate}
+              optionType={parameters.optionType}
+            />
+            
+            <GreeksThroughTime
+              spotPrice={parameters.spotPrice}
+              strikePrice={parameters.strikePrice}
+              volatility={parameters.volatility}
+              timeToMaturity={parameters.timeToMaturity}
+              riskFreeRate={parameters.riskFreeRate}
+              optionType={parameters.optionType}
+            />
+          </div>
+        )}
+
+        {/* AI Insights Tab (NEW) */}
+        {activeTab === "ai-insights" && (
+          <div className="space-y-6">
+            <AIStrategySuggestions
+              parameters={parameters}
+              greeks={greeks}
+              result={result}
+            />
           </div>
         )}
 
@@ -639,6 +785,7 @@ export default function EnhancedDashboard() {
         {activeTab === "strategies" && <StrategyBuilder />}
         {activeTab === "portfolio" && <PortfolioGreeks />}
         {activeTab === "hedging" && <GreeksHedgingCalculator />}
+        {activeTab === "position-sizing" && <PositionSizingCalculator />}
         {activeTab === "historical" && <HistoricalVolatility />}
         {activeTab === "risk" && <RiskScenarioAnalysis />}
 
