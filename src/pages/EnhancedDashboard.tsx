@@ -27,6 +27,7 @@ import AIStrategySuggestions from "@/components/AIStrategySuggestions";
 import WorkspaceManagerComponent from "@/components/WorkspaceManager";
 import ExportButton from "@/components/ExportButton";
 import SocialShare from "@/components/SocialShare";
+import TradingSimulator from "@/components/RealisticTradingSimulator";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -56,7 +57,8 @@ import {
   Layers,
   Target,
   Clock,
-  Sparkles
+  Sparkles,
+  Gamepad2
 } from "lucide-react";
 import {
   calculateBlackScholes,
@@ -408,54 +410,58 @@ export default function EnhancedDashboard() {
         </div>
       </header>
 
-      {/* Main Navigation */}
-      <div className="border-b bg-muted/30">
+      {/* Main Navigation - SCROLLABLE! */}
+      <div className="border-b bg-muted/30 overflow-x-auto">
         <div className="px-8">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="h-12">
-              <TabsTrigger value="pricing" className="gap-2">
+            <TabsList className="h-12 inline-flex w-auto">
+              <TabsTrigger value="game" className="gap-2 whitespace-nowrap bg-gradient-to-r from-purple-600 to-pink-600 text-white data-[state=active]:text-white">
+                <Gamepad2 className="h-4 w-4" />
+                Trading Game
+              </TabsTrigger>
+              <TabsTrigger value="pricing" className="gap-2 whitespace-nowrap">
                 <Calculator className="h-4 w-4" />
                 Options Pricing
               </TabsTrigger>
-              <TabsTrigger value="advanced" className="gap-2">
+              <TabsTrigger value="advanced" className="gap-2 whitespace-nowrap">
                 <Layers className="h-4 w-4" />
                 Advanced Analytics
               </TabsTrigger>
-              <TabsTrigger value="animations" className="gap-2">
+              <TabsTrigger value="animations" className="gap-2 whitespace-nowrap">
                 <Clock className="h-4 w-4" />
                 Time Analysis
               </TabsTrigger>
-              <TabsTrigger value="ai-insights" className="gap-2">
+              <TabsTrigger value="ai-insights" className="gap-2 whitespace-nowrap">
                 <Sparkles className="h-4 w-4" />
                 AI Insights
               </TabsTrigger>
-              <TabsTrigger value="market-data" className="gap-2">
+              <TabsTrigger value="market-data" className="gap-2 whitespace-nowrap">
                 <Database className="h-4 w-4" />
                 Market Data
               </TabsTrigger>
-              <TabsTrigger value="strategies" className="gap-2">
+              <TabsTrigger value="strategies" className="gap-2 whitespace-nowrap">
                 <TrendingUp className="h-4 w-4" />
                 Strategies
               </TabsTrigger>
-              <TabsTrigger value="portfolio" className="gap-2">
+              <TabsTrigger value="portfolio" className="gap-2 whitespace-nowrap">
                 <Briefcase className="h-4 w-4" />
                 Portfolio
               </TabsTrigger>
-              <TabsTrigger value="hedging" className="gap-2">
+              <TabsTrigger value="hedging" className="gap-2 whitespace-nowrap">
                 <Shield className="h-4 w-4" />
                 Hedging
               </TabsTrigger>
-              <TabsTrigger value="position-sizing" className="gap-2">
+              <TabsTrigger value="position-sizing" className="gap-2 whitespace-nowrap">
                 <Target className="h-4 w-4" />
                 Position Sizing
               </TabsTrigger>
-              <TabsTrigger value="historical" className="gap-2">
+              <TabsTrigger value="historical" className="gap-2 whitespace-nowrap">
                 <LineChart className="h-4 w-4" />
                 Historical
               </TabsTrigger>
-              <TabsTrigger value="risk" className="gap-2">
+              <TabsTrigger value="risk" className="gap-2 whitespace-nowrap">
                 <AlertTriangle className="h-4 w-4" />
-                Risk
+                Risk Scenarios
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -463,7 +469,10 @@ export default function EnhancedDashboard() {
       </div>
 
       <main className="p-8">
-        {/* Options Pricing Tab */}
+        {/* TRADING GAME TAB */}
+        {activeTab === "game" && <TradingSimulator />}
+
+        {/* OPTIONS PRICING TAB - COMPLETE VERSION */}
         {activeTab === "pricing" && (
           <div className="grid grid-cols-12 gap-6">
             <div className="col-span-3">
@@ -720,7 +729,6 @@ export default function EnhancedDashboard() {
           </div>
         )}
 
-        {/* Advanced Analytics Tab */}
         {activeTab === "advanced" && (
           <div className="space-y-6">
             <ProbabilityDistribution
@@ -747,7 +755,6 @@ export default function EnhancedDashboard() {
           </div>
         )}
 
-        {/* Time Analysis Tab (NEW) */}
         {activeTab === "animations" && (
           <div className="space-y-6">
             <TimeDecayAnimation
@@ -770,15 +777,12 @@ export default function EnhancedDashboard() {
           </div>
         )}
 
-        {/* AI Insights Tab (NEW) */}
         {activeTab === "ai-insights" && (
-          <div className="space-y-6">
-            <AIStrategySuggestions
-              parameters={parameters}
-              greeks={greeks}
-              result={result}
-            />
-          </div>
+          <AIStrategySuggestions
+            parameters={parameters}
+            greeks={greeks}
+            result={result}
+          />
         )}
 
         {activeTab === "market-data" && <MarketDataPanel />}
