@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
 import { Play, Pause, RotateCcw } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { calculateBlackScholes } from '@/lib/advanced-options-pricing';
 
-interface Props {
+interface TimeDecayAnimationProps {
   spotPrice: number;
   strikePrice: number;
   volatility: number;
@@ -22,164 +21,163 @@ export default function TimeDecayAnimation({
   timeToMaturity,
   riskFreeRate,
   optionType,
-}: Props) {
+}: TimeDecayAnimationProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentDay, setCurrentDay] = useState(0);
-  const totalDays = Math.floor(timeToMaturity * 365);
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const [data, setData] = useState<any[]>([]);
+  
+  const totalFrames = 50;
 
-  // Generate time decay data
-  const generateData = () => {
-    const data = [];
-    for (let day = 0; day <= totalDays; day++) {
-      const t = (totalDays - day) / 365;
-      const result = calculateBlackScholes({
-        spotPrice,
-        strikePrice,
-        volatility,
-        timeToMaturity: Math.max(0.001, t),
-        riskFreeRate,
-        dividendYield: 0,
-        optionType,
-      });
-      
-      data.push({
-        day,
-        daysRemaining: totalDays - day,
-        price: result.price,
-        theta: result.greeks.theta,
-      });
-    }
-    return data;
-  };
-
-  const data = generateData();
-  const currentData = data.slice(0, currentDay + 1);
-
+  // Generate full dataset
   useEffect(() => {
-    if (isPlaying && currentDay < totalDays) {
+    const fullData = [];
+    for (let i = 0; i <= totalFrames; i++) {
+      const daysRemaining = timeToMaturity * 365 * (1 - i / totalFrames);
+      const t = daysRemaining / 365;
+      
+      if (t <= 0) {
+        // At expiration
+        const intrinsicValue = optionType === 'call' 
+          ? Math.max(0, spotPrice - strikePrice)
+          : Math.max(0, strikePrice - spotPrice);
+        
+        fullData.push({
+          daysRemaining: 0,
+          optionValue: intrinsicValue,
+        });
+      } else {
+        const result = calculateBlackScholes({
+          spotPrice,
+          strikePrice,
+          volatility,
+          timeToMaturity: t,
+          riskFreeRate,
+          dividendYield: 0,
+          optionType,
+        });
+        
+        fullData.push({
+          daysRemaining: Math.round(daysRemaining),
+          optionValue: result.price,
+        });
+      }
+    }
+    setData(fullData);
+  }, [spotPrice, strikePrice, volatility, timeToMaturity, riskFreeRate, optionType]);
+
+  // Animation effect
+  useEffect(() => {
+    if (isPlaying && currentFrame < totalFrames) {
       const timer = setTimeout(() => {
-        setCurrentDay(prev => prev + 1);
-      }, 50);
+        setCurrentFrame(prev => prev + 1);
+      }, 100); // 100ms per frame = 5 second total animation
+      
       return () => clearTimeout(timer);
-    } else if (currentDay >= totalDays) {
+    } else if (currentFrame >= totalFrames) {
       setIsPlaying(false);
     }
-  }, [isPlaying, currentDay, totalDays]);
+  }, [isPlaying, currentFrame]);
 
-  const handlePlayPause = () => {
-    if (currentDay >= totalDays) {
-      setCurrentDay(0);
+  const handlePlay = () => {
+    if (currentFrame >= totalFrames) {
+      setCurrentFrame(0);
     }
-    setIsPlaying(!isPlaying);
+    setIsPlaying(true);
+  };
+
+  const handlePause = () => {
+    setIsPlaying(false);
   };
 
   const handleReset = () => {
     setIsPlaying(false);
-    setCurrentDay(0);
+    setCurrentFrame(0);
   };
 
-  const currentPrice = data[currentDay]?.price || 0;
-  const initialPrice = data[0]?.price || 0;
-  const decayAmount = initialPrice - currentPrice;
-  const decayPercent = (decayAmount / initialPrice) * 100;
+  // Get visible data up to current frame
+  const visibleData = data.slice(0, currentFrame + 1);
 
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Time Decay Animation (Theta Burn)</h3>
+        <div>
+          <h3 className="text-lg font-semibold">Time Decay Animation (Theta)</h3>
+          <p className="text-sm text-muted-foreground">
+            Watch how option value decays as time passes
+          </p>
+        </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePlayPause}
-            className="gap-2"
-          >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            {isPlaying ? 'Pause' : 'Play'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            className="gap-2"
-          >
+          {!isPlaying ? (
+            <Button onClick={handlePlay} size="sm" className="gap-2">
+              <Play className="h-4 w-4" />
+              Play
+            </Button>
+          ) : (
+            <Button onClick={handlePause} size="sm" variant="outline" className="gap-2">
+              <Pause className="h-4 w-4" />
+              Pause
+            </Button>
+          )}
+          <Button onClick={handleReset} size="sm" variant="outline" className="gap-2">
             <RotateCcw className="h-4 w-4" />
             Reset
           </Button>
         </div>
       </div>
 
-      <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950 dark:to-orange-950 rounded-lg">
-        <div className="grid grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Day</p>
-            <p className="text-2xl font-bold">{currentDay}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Days Remaining</p>
-            <p className="text-2xl font-bold">{totalDays - currentDay}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Current Price</p>
-            <p className="text-2xl font-bold">${currentPrice.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Decay</p>
-            <p className="text-2xl font-bold text-red-600">
-              -${decayAmount.toFixed(2)} ({decayPercent.toFixed(1)}%)
-            </p>
-          </div>
+      <div className="mb-4">
+        <div className="flex items-center justify-between text-sm mb-2">
+          <span className="text-muted-foreground">Progress:</span>
+          <span className="font-semibold">{Math.round((currentFrame / totalFrames) * 100)}%</span>
+        </div>
+        <div className="w-full bg-muted rounded-full h-2">
+          <div 
+            className="bg-primary rounded-full h-2 transition-all duration-100"
+            style={{ width: `${(currentFrame / totalFrames) * 100}%` }}
+          />
         </div>
       </div>
 
-      <Slider
-        value={[currentDay]}
-        onValueChange={(value) => {
-          setIsPlaying(false);
-          setCurrentDay(value[0]);
-        }}
-        max={totalDays}
-        step={1}
-        className="mb-4"
-      />
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={visibleData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis 
+            dataKey="daysRemaining" 
+            label={{ value: 'Days to Expiration', position: 'insideBottom', offset: -5 }}
+            reversed
+          />
+          <YAxis 
+            label={{ value: 'Option Value ($)', angle: -90, position: 'insideLeft' }}
+          />
+          <Tooltip 
+            formatter={(value: any) => `$${value.toFixed(2)}`}
+            labelFormatter={(label) => `${label} days remaining`}
+          />
+          <Legend />
+          <Line 
+            type="monotone" 
+            dataKey="optionValue" 
+            stroke="#8884d8" 
+            strokeWidth={3}
+            dot={false}
+            name="Option Value"
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
 
-      <LineChart width={800} height={300} data={currentData}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="day" 
-          label={{ value: 'Days Passed', position: 'insideBottom', offset: -5 }}
-        />
-        <YAxis 
-          label={{ value: 'Option Price ($)', angle: -90, position: 'insideLeft' }}
-        />
-        <Tooltip 
-          formatter={(value: any, name: string) => {
-            if (name === 'price') return [`$${value.toFixed(2)}`, 'Option Price'];
-            return [value, name];
-          }}
-        />
-        <Legend />
-        <Line
-          type="monotone"
-          dataKey="price"
-          stroke="#ef4444"
-          strokeWidth={3}
-          dot={false}
-          name="Option Price"
-        />
-        <ReferenceLine
-          x={currentDay}
-          stroke="#3b82f6"
-          strokeWidth={2}
-          strokeDasharray="5 5"
-          label={{ value: 'Now', position: 'top' }}
-        />
-      </LineChart>
-
-      <div className="mt-4 text-sm text-muted-foreground">
-        <p>
-          ⏰ This animation shows how option value decays as time passes (Theta effect). 
-          Notice the decay accelerates as expiration approaches!
+      <div className="mt-4 p-4 bg-muted rounded-lg">
+        <p className="text-sm">
+          <strong>Current State:</strong>{' '}
+          {visibleData.length > 0 && (
+            <>
+              {visibleData[visibleData.length - 1].daysRemaining} days remaining • 
+              Option Value: ${visibleData[visibleData.length - 1].optionValue.toFixed(2)}
+            </>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          Time decay (Theta) accelerates as expiration approaches, especially for at-the-money options.
         </p>
       </div>
     </Card>
